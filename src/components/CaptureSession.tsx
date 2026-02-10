@@ -134,6 +134,18 @@ export function CaptureSession({
 
         if (!ctx) return null;
 
+        // Guard: video must have current frame data, otherwise we capture a black image
+        if (video.readyState < 2) {
+            console.warn('captureFrame: video not ready (readyState:', video.readyState, ')');
+            return null;
+        }
+
+        // Guard: video dimensions must be valid
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+            console.warn('captureFrame: invalid video dimensions', video.videoWidth, video.videoHeight);
+            return null;
+        }
+
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);

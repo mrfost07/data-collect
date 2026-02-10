@@ -4,15 +4,11 @@
  * Uploads capture images and metadata to Cloudinary.
  * 
  * Folder structure in Cloudinary:
- *   face-data/{session_id}/{label}/{phase}/
- *     img_{seq}.jpg
- *     meta_{seq}.json (stored as raw file)
+ *   face-data/{label}/
+ *     img_{session}_{phase}_{seq}.jpg
+ *     meta_{session}_{phase}_{seq}.json
  * 
- * Benefits over Google Drive:
- * - No aggressive rate limiting (500+ uploads/hour on free tier)
- * - Simple REST API — 1 call per upload
- * - Built-in folder organization
- * - CDN delivery for viewing uploaded images
+ * All images for each label (both phases) are combined in one folder.
  */
 
 import { v2 as cloudinary } from 'cloudinary';
@@ -32,19 +28,13 @@ function sanitizeName(name: string): string {
 }
 
 /**
- * Build the folder path for a capture
+ * Build the folder path for a capture.
+ * Flat structure: face-data/{label}/
+ * No session_id or phase subdivision.
  */
 function buildFolderPath(metadata: CaptureMetadata): string {
-    const sessionId = sanitizeName(metadata.session_id);
     const label = sanitizeName(metadata.label);
-    const phase = metadata.phase === 'A' ? 'eyes_only' : 'with_face';
-
-    // Special labels get their own top-level folder (no phase subdivision)
-    if (metadata.label === 'no_face' || metadata.label === 'with_cellphone') {
-        return `face-data/${sessionId}/${label}`;
-    }
-
-    return `face-data/${sessionId}/${label}/${phase}`;
+    return `face-data/${label}`;
 }
 
 /**
@@ -57,7 +47,10 @@ export async function uploadCapture(
 ): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
     try {
         const folder = buildFolderPath(metadata);
+        const sessionShort = metadata.session_id.substring(0, 8);
+        const phase = metadata.phase === 'A' ? 'eyes' : 'face';
         const seq = String(metadata.seq).padStart(4, '0');
+        const publicIdSuffix = `${sessionShort}_${phase}_${seq}`;
 
         // Strip data URL prefix if present
         const base64Data = imageBase64.includes(',')
@@ -72,7 +65,7 @@ export async function uploadCapture(
         const [imageResult] = await Promise.all([
             cloudinary.uploader.upload(base64Data, {
                 folder,
-                public_id: `img_${seq}`,
+                public_id: `img_${publicIdSuffix}`,
                 resource_type: 'image',
                 overwrite: true,
                 tags: [
@@ -91,7 +84,7 @@ export async function uploadCapture(
             }),
             cloudinary.uploader.upload(metaBase64, {
                 folder,
-                public_id: `meta_${seq}`,
+                public_id: `meta_${publicIdSuffix}`,
                 resource_type: 'raw',
                 overwrite: true,
             }),
